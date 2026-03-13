@@ -335,15 +335,6 @@ class Figure8TMazeEnv(MiniGridEnv):
             # Task description string
             "mission": mission_space,
 
-            # --- CRITICAL ADDITIONS for Working Memory ---
-
-            # Last choice made (encoded as integer)
-            # 0 = no prior choice (first trial)
-            # 1 = last choice was 'left'
-            # 2 = last choice was 'right'
-            # Paper Connection: This provides working memory needed for alternation
-            "last_choice": spaces.Discrete(3),
-
             # Current trial number (0 to max_trials)
             "trial_number": spaces.Box(
                 low=0,
@@ -710,21 +701,11 @@ class Figure8TMazeEnv(MiniGridEnv):
         # Get visual rendering of maze (15x15 RGB image)
         image = self.get_frame(highlight=True, tile_size=VIEW_TILE_SIZE)
 
-        # Encode last choice as integer for observation space
-        # This provides the WORKING MEMORY needed for alternation
-        if self.last_choice is None:
-            last_choice_encoded = 0  # No prior choice
-        elif self.last_choice == 'left':
-            last_choice_encoded = 1  # Last trial was left
-        else:  # self.last_choice == 'right'
-            last_choice_encoded = 2  # Last trial was right
-
         # Construct observation dictionary
         obs = {
             "image": image,
             "direction": self.agent_dir,
             "mission": self.mission,
-            "last_choice": last_choice_encoded,  # CRITICAL for task!
             "trial_number": np.array([self.trial_count], dtype=np.int32),
             "position_vector": np.array(self.agent_pos, dtype=np.float32),
         }
