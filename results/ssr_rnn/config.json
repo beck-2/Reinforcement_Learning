@@ -1,0 +1,23 @@
+{
+  "hidden_size": 128,
+  "feature_dim": 64,
+  "obs_dim_base": 6,
+  "num_actions": 3,
+  "rollout_length": 256,
+  "gamma": 0.97,
+  "lr": 0.0003,
+  "entropy_coef": 0.01,
+  "value_loss_coef": 0.5,
+  "sr_loss_coef": 1.0,
+  "grad_clip": 0.5,
+  "num_train_steps": 200000,
+  "seed": 0,
+  "max_trials_per_episode": 50,
+  "step_cost": -0.01,
+  "turn_cost": -0.01,
+  "use_last_choice": false,
+  "log_interval": 100,
+  "eval_interval": 1000,
+  "eval_episodes": 20,
+  "output_dir": "results/ssr_rnn"
+}

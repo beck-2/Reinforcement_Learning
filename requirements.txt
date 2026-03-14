@@ -1,0 +1,13 @@
+numpy==1.26.4
+matplotlib==3.8.4
+gymnasium==0.29.1
+minigrid==2.3.1
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+tqdm==4.66.4
+scipy==1.13.0
+pandas==2.2.2
+tensorboard==2.16.2
+pillow==10.3.0
+imageio==2.34.1

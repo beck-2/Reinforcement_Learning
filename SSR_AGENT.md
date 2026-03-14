@@ -29,11 +29,14 @@ Environment observation includes:
 **Agent input (by design):**
 - `position_vector` and `direction` only.
 - `last_choice` and `trial_number` are deliberately excluded so the RNN must store memory internally.
+ - Optional derived cues (enabled by default): `start_flag` and `stem_sector`, both computed from position.
 
 Input encoding (default):
 - Position normalized by `MAZE_SIZE` → 2 floats in `[0,1]`
 - Direction as one-hot → 4 floats
-- Total `obs_dim = 6`
+- Start flag (1 if at start position, else 0)
+- Stem sector (0..4, normalized by /4)
+- Total `obs_dim = 8`
 
 ## SR formulation
 Let `phi(s)` be the feature encoding of the current observation. The SR head predicts:
@@ -60,14 +63,15 @@ Defined in `ssr_config.py`:
 - `rollout_length = 256`
 - `gamma = 0.97`
 - `lr = 3e-4`
-- `entropy_coef = 0.01`
+- `entropy_coef = 0.02`
 - `value_loss_coef = 0.5`
-- `sr_loss_coef = 1.0`
+- `sr_loss_coef = 0.2`
+- `sr_warmup_steps = 50_000`
 - `grad_clip = 0.5`
 - `num_train_steps = 2_000_000`
 - `max_trials_per_episode = 50`
-- `step_cost = -0.01`
-- `turn_cost = -0.01`
+- `step_cost = 0.0`
+- `turn_cost = 0.0`
 
 ## How to run
 Train:

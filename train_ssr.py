@@ -19,7 +19,15 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 
 from figure8_maze_env import Figure8TMazeEnv
-from constants import MAZE_SIZE
+from constants import (
+    MAZE_SIZE,
+    START_POS,
+    STEM_X,
+    SECTOR_1_RANGE,
+    SECTOR_2_RANGE,
+    SECTOR_3_RANGE,
+    SECTOR_4_RANGE,
+)
 from ssr_config import SSRConfig
 from ssr_model import SSRRecurrentActorCritic
 
@@ -43,6 +51,25 @@ def obs_to_tensor(obs: dict, config: SSRConfig, device=None) -> torch.Tensor:
     if config.use_last_choice:
         last_choice = float(obs["last_choice"]) / 2.0  # normalize 0..2 → 0..1
         parts.append(np.array([last_choice], dtype=np.float32))
+    if config.use_start_flag:
+        at_start = 1.0 if tuple(obs["position_vector"]) == START_POS else 0.0
+        parts.append(np.array([at_start], dtype=np.float32))
+    if config.use_stem_sector:
+        x, y = obs["position_vector"]
+        if int(x) == STEM_X:
+            if SECTOR_1_RANGE[0] <= y <= SECTOR_1_RANGE[1]:
+                sector = 1
+            elif SECTOR_2_RANGE[0] <= y <= SECTOR_2_RANGE[1]:
+                sector = 2
+            elif SECTOR_3_RANGE[0] <= y <= SECTOR_3_RANGE[1]:
+                sector = 3
+            elif SECTOR_4_RANGE[0] <= y <= SECTOR_4_RANGE[1]:
+                sector = 4
+            else:
+                sector = 0
+        else:
+            sector = 0
+        parts.append(np.array([sector / 4.0], dtype=np.float32))
 
     vec = np.concatenate(parts)
     t = torch.tensor(vec, dtype=torch.float32)
@@ -220,11 +247,12 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
         value_loss = F.mse_loss(values_t, returns)
         entropy_loss = -entropies_t.mean()
 
+        sr_scale = min(1.0, total_steps / max(1, config.sr_warmup_steps))
         loss = (
             policy_loss
             + config.value_loss_coef * value_loss
             + config.entropy_coef * entropy_loss
-            + config.sr_loss_coef * sr_loss
+            + (config.sr_loss_coef * sr_scale) * sr_loss
         )
 
         if torch.isnan(loss):

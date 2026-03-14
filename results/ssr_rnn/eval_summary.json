@@ -1,0 +1,9 @@
+{
+  "accuracy": 0.0,
+  "accuracy_std": 0.0,
+  "return": 0.0,
+  "return_std": 0.0,
+  "length": 10000.0,
+  "episodes": 20,
+  "policy": "greedy"
+}

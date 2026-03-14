@@ -14,20 +14,23 @@ class SSRConfig:
     rollout_length: int = 256
     gamma: float = 0.97
     lr: float = 3e-4
-    entropy_coef: float = 0.01
+    entropy_coef: float = 0.02
     value_loss_coef: float = 0.5
-    sr_loss_coef: float = 1.0
+    sr_loss_coef: float = 0.2
+    sr_warmup_steps: int = 50_000
     grad_clip: float = 0.5
-    num_train_steps: int = 2_000_000
+    num_train_steps: int = 200000
     seed: int = 0
 
     # Environment — sparse reward per spec
     max_trials_per_episode: int = 50
-    step_cost: float = -0.01
-    turn_cost: float = -0.01
+    step_cost: float = 0.0
+    turn_cost: float = 0.0
 
     # Observation selection
     use_last_choice: bool = False  # Keep False to force RNN memory
+    use_start_flag: bool = True    # Derived cue: trial start at base of stem
+    use_stem_sector: bool = True   # Derived cue: stem sector 1-4, else 0
 
     # Logging / outputs
     log_interval: int = 100    # rollouts between console logs
@@ -37,7 +40,11 @@ class SSRConfig:
 
     @property
     def obs_dim(self) -> int:
-        return self.obs_dim_base + (1 if self.use_last_choice else 0)
+        extra = 0
+        extra += 1 if self.use_last_choice else 0
+        extra += 1 if self.use_start_flag else 0
+        extra += 1 if self.use_stem_sector else 0
+        return self.obs_dim_base + extra
 
     @property
     def checkpoint_path(self) -> str:
