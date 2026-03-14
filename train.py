@@ -135,7 +135,6 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
     # Logging buffers (last 100 episodes)
     ep_rewards = deque(maxlen=100)
-    ep_accuracies = deque(maxlen=100)
     ep_lengths = deque(maxlen=100)
 
     rollout_idx = 0
@@ -146,7 +145,7 @@ def train(config: Config = None) -> RecurrentActorCritic:
     log_path = "training_log.csv"
     log_fields = [
         "steps", "rollout",
-        "mean_return", "mean_accuracy", "mean_episode_length",
+        "mean_return", "mean_episode_length",
         "policy_loss", "value_loss", "entropy",
         "grad_norm",
     ]
@@ -199,7 +198,6 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
             if done:
                 ep_rewards.append(current_ep_reward)
-                ep_accuracies.append(info.get("accuracy", 0.0))
                 ep_lengths.append(current_ep_steps)
                 current_ep_reward = 0.0
                 current_ep_steps = 0
@@ -225,8 +223,6 @@ def train(config: Config = None) -> RecurrentActorCritic:
         entropies_t = torch.stack(entropies_list)                      # (T,)
 
         advantages = returns - values_t.detach()
-        # Normalize advantages for training stability
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # ── Losses ────────────────────────────────────────────────────────
         policy_loss = -(log_probs_t * advantages).mean()
@@ -265,14 +261,12 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
         # ── Logging (CSV every rollout, console every log_interval) ────────
         mean_ret = np.mean(ep_rewards) if ep_rewards else 0.0
-        mean_acc = np.mean(ep_accuracies) if ep_accuracies else 0.0
         mean_len = np.mean(ep_lengths) if ep_lengths else 0.0
 
         csv_writer.writerow({
             "steps":               total_steps,
             "rollout":             rollout_idx,
             "mean_return":         round(mean_ret, 4),
-            "mean_accuracy":       round(mean_acc, 4),
             "mean_episode_length": round(mean_len, 1),
             "policy_loss":         round(policy_loss.item(), 6),
             "value_loss":          round(value_loss.item(), 6),
@@ -285,7 +279,6 @@ def train(config: Config = None) -> RecurrentActorCritic:
             print(
                 f"steps={total_steps:8d}  "
                 f"return={mean_ret:6.2f}  "
-                f"acc={mean_acc:.1%}  "
                 f"ploss={policy_loss.item():7.4f}  "
                 f"vloss={value_loss.item():6.4f}  "
                 f"ent={entropies_t.mean().item():.3f}  "

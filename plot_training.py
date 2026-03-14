@@ -39,9 +39,9 @@ def plot(log_path: str = "training_log.csv", out_path: str = "training_curves.pn
     data = load_log(log_path)
     steps = data["steps"]
 
-    fig = plt.figure(figsize=(14, 12))
+    fig = plt.figure(figsize=(14, 10))
     fig.suptitle("A2C Training — Figure-8 Alternation Task", fontsize=14, y=0.98)
-    gs = gridspec.GridSpec(4, 2, hspace=0.45, wspace=0.35)
+    gs = gridspec.GridSpec(3, 2, hspace=0.45, wspace=0.35)
 
     def add_panel(ax, y, title, ylabel, color, random_baseline=None):
         ax.plot(steps, y, alpha=0.25, color=color, linewidth=0.8)
@@ -59,12 +59,12 @@ def plot(log_path: str = "training_log.csv", out_path: str = "training_curves.pn
         ax.grid(True, alpha=0.3)
 
     add_panel(fig.add_subplot(gs[0, 0]),
-              data["mean_accuracy"], "Alternation Accuracy (primary metric)",
-              "Accuracy", "#2196F3", random_baseline=0.5)
-
-    add_panel(fig.add_subplot(gs[0, 1]),
               data["mean_return"], "Episode Return",
               "Return", "#4CAF50")
+
+    add_panel(fig.add_subplot(gs[0, 1]),
+              data["mean_episode_length"] if "mean_episode_length" in data else np.zeros_like(steps),
+              "Episode Length", "Steps", "#00BCD4")
 
     add_panel(fig.add_subplot(gs[1, 0]),
               data["policy_loss"], "Policy Loss",
@@ -81,11 +81,6 @@ def plot(log_path: str = "training_log.csv", out_path: str = "training_curves.pn
     add_panel(fig.add_subplot(gs[2, 1]),
               data["grad_norm"], "Gradient Norm",
               "‖∇‖₂", "#607D8B")
-
-    if "mean_episode_length" in data:
-        add_panel(fig.add_subplot(gs[3, 0]),
-                  data["mean_episode_length"], "Episode Length",
-                  "Steps", "#00BCD4")
 
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()

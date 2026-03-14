@@ -335,14 +335,12 @@ class Figure8TMazeEnv(MiniGridEnv):
         })
 
         # --- Precompute Rewarded Poses ---
-        # Calculate all valid "reached" poses for each well
-        # This is done once at initialization for efficiency
-        self.rewarded_poses_left = rewarded_poses_for_target(*LEFT_WELL_LOC)
-        self.rewarded_poses_right = rewarded_poses_for_target(*RIGHT_WELL_LOC)
-
-        # Example: rewarded_poses_left might be:
-        # {(4, 3, 1), (4, 5, 3), (3, 4, 0), (5, 4, 2)}
-        # Meaning agent can approach left well from 4 different directions
+        # Only the correct approach direction counts — agent must come from the
+        # T-junction arm side, not from the return arm below or any other direction.
+        # Left well (4,4): agent must approach from the East → pose (5, 4, West=2)
+        # Right well (10,4): agent must approach from the West → pose (9, 4, East=0)
+        self.rewarded_poses_left = {(LEFT_WELL_LOC[0] + 1, LEFT_WELL_LOC[1], 2)}   # (5, 4, West)
+        self.rewarded_poses_right = {(RIGHT_WELL_LOC[0] - 1, RIGHT_WELL_LOC[1], 0)} # (9, 4, East)
 
     # =========================================================================
     # GRID GENERATION - BUILD THE MAZE STRUCTURE
@@ -493,6 +491,13 @@ class Figure8TMazeEnv(MiniGridEnv):
         self.correct_trials = 0       # No correct trials yet
         self.incorrect_trials = 0     # No incorrect trials yet
         self.trial_history = []       # Empty history
+        self._at_well_side = None     # Guard: 'left'/'right'/None — prevents double-counting same well visit
+        # 3-stage figure-8 loop gate (phase 0 = reward OK):
+        #   1 → must reach correct return arm bottom corner
+        #   2 → must reach stem bottom (STEM_X, STEM_BOTTOM)
+        #   3 → must reach T-junction (STEM_X, STEM_TOP)
+        self._loop_phase = 0
+        self._loop_arm_bottom = None  # (x, STEM_BOTTOM) for the arm just visited
 
         # --- Reset Trajectory Tracking ---
         self.trajectory = []  # No poses recorded yet
@@ -585,12 +590,26 @@ class Figure8TMazeEnv(MiniGridEnv):
         choice_made = None     # Will be 'left', 'right', or None
         choice_correct = None  # Will be True, False, or None
 
+        # Clear per-side guard once agent leaves that side's rewarded poses
+        if self._at_well_side == 'left' and current_pose not in self.rewarded_poses_left:
+            self._at_well_side = None
+        elif self._at_well_side == 'right' and current_pose not in self.rewarded_poses_right:
+            self._at_well_side = None
+
+        # Advance figure-8 loop gate through its 3 phases
+        if self._loop_phase == 1 and self.agent_pos == self._loop_arm_bottom:
+            self._loop_phase = 2  # Reached arm bottom → now need stem bottom
+        elif self._loop_phase == 2 and self.agent_pos == (STEM_X, STEM_BOTTOM):
+            self._loop_phase = 3  # Reached stem bottom → now need T-junction
+        elif self._loop_phase == 3 and self.agent_pos == (STEM_X, STEM_TOP):
+            self._loop_phase = 0  # Reached T-junction → reward unlocked
+
         # Check if current pose matches any rewarded pose for left well
-        if current_pose in self.rewarded_poses_left:
+        if self._at_well_side != 'left' and self._loop_phase == 0 and current_pose in self.rewarded_poses_left:
             choice_made = 'left'  # Agent chose left arm
 
         # Check if current pose matches any rewarded pose for right well
-        elif current_pose in self.rewarded_poses_right:
+        elif self._at_well_side != 'right' and self._loop_phase == 0 and current_pose in self.rewarded_poses_right:
             choice_made = 'right'  # Agent chose right arm
 
         # --- Evaluate Alternation Rule ---
@@ -638,15 +657,13 @@ class Figure8TMazeEnv(MiniGridEnv):
             # CRITICAL: Remember this choice for next trial
             # This is the "episodic memory" component from the paper
             self.last_choice = choice_made
+            self._at_well_side = choice_made  # Prevent re-triggering until agent leaves this well
+            # Start 3-stage figure-8 gate: arm bottom → stem bottom → T-junction
+            self._loop_arm_bottom = (LEFT_RETURN_X, STEM_BOTTOM) if choice_made == 'left' else (RIGHT_RETURN_X, STEM_BOTTOM)
+            self._loop_phase = 1
 
-            # --- Reset Agent for Next Trial ---
-            # Paper Connection: "returned to the base of the stem via connecting arms"
-            # We simplify by teleporting back to start (continuous task!)
-            self.agent_pos = self.agent_start_pos  # Back to (7, 12)
-            self.agent_dir = self.agent_start_dir  # Facing North
-
-            # Reset trial trajectory (new trial starting)
-            self.current_trial_trajectory = [(*self.agent_pos, self.agent_dir)]
+            # Reset trial trajectory (agent continues physically from well)
+            self.current_trial_trajectory = [current_pose]
 
             # --- Check if Episode Should End ---
             # Paper Connection: Sessions lasted 30-50 trials

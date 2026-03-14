@@ -10,7 +10,7 @@ class Config:
 
     # Training
     rollout_length: int = 256
-    gamma: float = 0.99
+    gamma: float = 0.97
     lr: float = 3e-4
     entropy_coef: float = 0.01
     value_loss_coef: float = 0.5
@@ -19,7 +19,7 @@ class Config:
 
     # Environment — sparse reward per spec
     max_trials_per_episode: int = 50
-    step_cost: float = 0.0
+    step_cost: float = -0.001
     turn_cost: float = 0.0
 
     # Logging

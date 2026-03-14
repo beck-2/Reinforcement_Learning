@@ -35,7 +35,12 @@ def force_choice(env, choice: str) -> float:
     Valid pre-reward positions (verified against maze layout):
       left:  (6, 4) facing West  → forward lands on (5, 4, West) ∈ rewarded_poses_left
       right: (8, 4) facing East  → forward lands on (9, 4, East) ∈ rewarded_poses_right
+
+    Clears _at_well_side before teleporting since this helper bypasses real navigation.
     """
+    env._at_well_side = None     # simulate having navigated away from any prior well
+    env._loop_phase = 0          # simulate having completed the full figure-8 loop
+    env._loop_arm_bottom = None
     if choice == 'left':
         env.agent_pos = (6, 4)
         env.agent_dir = 2   # West

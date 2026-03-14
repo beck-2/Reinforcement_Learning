@@ -25,7 +25,7 @@ class RecurrentActorCritic(nn.Module):
             nn.Linear(obs_dim, hidden_size),
             nn.Tanh(),
         )
-        self.rnn = nn.RNN(hidden_size, hidden_size, batch_first=False)
+        self.rnn = nn.GRU(hidden_size, hidden_size, batch_first=False)
         self.actor = nn.Linear(hidden_size, num_actions)
         self.critic = nn.Linear(hidden_size, 1)
 
