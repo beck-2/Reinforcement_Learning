@@ -319,32 +319,13 @@ class Figure8TMazeEnv(MiniGridEnv):
         self.action_space = spaces.Discrete(3)
 
         # --- Define Observation Space ---
-        # This tells RL algorithms what information the agent receives
+        # Simple local navigation representation per spec:
+        # position (x, y) + facing direction — no explicit memory variables
         self.observation_space = spaces.Dict({
-            # Visual input: RGB image of maze
-            "image": spaces.Box(
-                low=0,
-                high=255,
-                shape=(AGENT_VIEW_SIZE, AGENT_VIEW_SIZE, 3),  # 15x15x3 RGB
-                dtype=np.uint8
-            ),
-
             # Direction agent is facing (0=E, 1=S, 2=W, 3=N)
             "direction": spaces.Discrete(4),
 
-            # Task description string
-            "mission": mission_space,
-
-            # Current trial number (0 to max_trials)
-            "trial_number": spaces.Box(
-                low=0,
-                high=self.max_trials_per_episode,
-                shape=(1,),
-                dtype=np.int32
-            ),
-
-            # Explicit position vector (x, y)
-            # Useful for agents that don't process images
+            # Agent (x, y) position in the grid
             "position_vector": spaces.Box(
                 low=0,
                 high=size,
@@ -698,15 +679,8 @@ class Figure8TMazeEnv(MiniGridEnv):
             - position_vector: (x, y) coordinates
         """
 
-        # Get visual rendering of maze (15x15 RGB image)
-        image = self.get_frame(highlight=True, tile_size=VIEW_TILE_SIZE)
-
-        # Construct observation dictionary
         obs = {
-            "image": image,
             "direction": self.agent_dir,
-            "mission": self.mission,
-            "trial_number": np.array([self.trial_count], dtype=np.int32),
             "position_vector": np.array(self.agent_pos, dtype=np.float32),
         }
 

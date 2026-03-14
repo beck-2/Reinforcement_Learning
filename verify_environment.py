@@ -73,58 +73,34 @@ def test_markov_state_space():
     obs, info = env.reset()
 
     # --- Test 1.1: Check Required Components ---
-    # Every observation MUST have these components for the task to work
-
-    assert 'image' in obs, "Missing image observation"
-    # Image provides visual/spatial information (allocentric view)
+    # Observation is minimal: position + direction (no explicit memory)
 
     assert 'position_vector' in obs, "Missing position vector"
-    # Explicit (x,y) coordinates for agents that don't use images
-
     assert 'direction' in obs, "Missing direction"
-    # Which way agent is facing (0=E, 1=S, 2=W, 3=N)
 
-    assert 'last_choice' in obs, "Missing last_choice (working memory)"
-    # CRITICAL: This is the working memory needed for alternation!
-    # Without this, state is not Markov (can't predict correct action)
-
-    assert 'trial_number' in obs, "Missing trial_number"
-    # Current trial count (useful for analysis)
-
-    print(f"✓ Observation space components: {obs.keys()}")
+    print(f"✓ Observation space components: {list(obs.keys())}")
+    print(f"✓ Position: {obs['position_vector']}")
+    print(f"✓ Direction: {obs['direction']}")
 
     # --- Test 1.2: Check Observation Shapes ---
-    # Verify dimensions match what we expect
 
-    print(f"✓ Image shape: {obs['image'].shape}")
-    # Should be (15, 15, 3) for 15x15 RGB image
+    assert obs['position_vector'].shape == (2,), \
+        f"Expected position shape (2,), got {obs['position_vector'].shape}"
+    assert obs['direction'] in range(4), \
+        f"Direction should be 0-3, got {obs['direction']}"
 
-    print(f"✓ Position: {obs['position_vector']}")
-    # Should be [x, y] where x,y are in range [0, 14]
-
-    print(f"✓ Direction: {obs['direction']}")
-    # Should be 0, 1, 2, or 3
-
-    print(f"✓ Last choice: {obs['last_choice']}")
-    # Should be 0 (none), 1 (left), or 2 (right)
-
-    print(f"✓ Trial number: {obs['trial_number']}")
-    # Should be [0] initially
+    print(f"✓ position_vector shape: {obs['position_vector'].shape}")
 
     # --- Test 1.3: Calculate State Space Size ---
-    # Verify our theoretical state space matches implementation
 
     total_positions = MAZE_SIZE * MAZE_SIZE  # 15 × 15 = 225 positions
     total_directions = 4                      # E, S, W, N
-    total_memory = 3                          # None, left, right
 
-    # Full state space (ignoring walls, which reduce it):
-    # |S| = |Positions| × |Directions| × |Memory|
-    theoretical_state_space = total_positions * total_directions * total_memory
-    print(f"✓ Theoretical state space size: {theoretical_state_space}")
-    # = 225 × 4 × 3 = 2,700 possible states
-
-    # In practice, many states are unreachable (walls), but this gives upper bound
+    # Without explicit memory in the observation, the MDP requires
+    # the agent to maintain memory internally (e.g. via recurrent state)
+    theoretical_state_space = total_positions * total_directions
+    print(f"✓ Observable state space size: {theoretical_state_space}")
+    # = 225 × 4 = 900 observable states (memory held by agent, not env)
 
     print("\n✅ PASSED: State space properly defined\n")
 
