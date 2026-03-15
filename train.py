@@ -24,6 +24,69 @@ from config import Config
 from constants import MAZE_SIZE
 
 
+# ── Curriculum stage definitions ───────────────────────────────────────────────
+# Stage rewards are applied directly to env attributes at runtime.
+# See methods.md for the full rationale behind each stage.
+
+STAGE_CONFIGS = {
+    1: dict(
+        step_cost=0.0,
+        turn_cost=0.0,
+        correct_reward=1.0,
+        incorrect_reward=0.0,
+        foraging_reward=0.5,
+        loop_bonus=0.2,
+        use_stage1_barriers=True,
+        force_alternation_barriers=True,
+        wall_bump_penalty=-0.1,
+    ),
+    2: dict(
+        step_cost=-0.001,
+        turn_cost=0.0,
+        correct_reward=1.0,
+        incorrect_reward=0.0,
+        foraging_reward=0.1,
+        loop_bonus=0.0,
+        use_stage1_barriers=True,
+        force_alternation_barriers=False,
+        wall_bump_penalty=-0.1,
+    ),
+    3: dict(
+        step_cost=-0.001,
+        turn_cost=0.0,
+        correct_reward=1.0,
+        incorrect_reward=0.0,
+        foraging_reward=0.0,
+        loop_bonus=0.0,
+        use_stage1_barriers=False,
+        force_alternation_barriers=False,
+        wall_bump_penalty=-0.1,
+    ),
+}
+
+
+def get_stage(total_steps: int, config: Config) -> int:
+    if total_steps >= config.stage3_start:
+        return 3
+    if total_steps >= config.stage2_start:
+        return 2
+    return 1
+
+
+def apply_stage(env: Figure8TMazeEnv, stage: int) -> None:
+    """Update env reward attributes in-place for the given curriculum stage."""
+    cfg = STAGE_CONFIGS[stage]
+    env.step_cost = cfg["step_cost"]
+    env.turn_cost = cfg["turn_cost"]
+    env.correct_reward = cfg["correct_reward"]
+    env.incorrect_reward = cfg["incorrect_reward"]
+    env.foraging_reward = cfg["foraging_reward"]
+    env.loop_bonus = cfg["loop_bonus"]
+    env.use_stage1_barriers = cfg["use_stage1_barriers"]
+    env.force_alternation_barriers = cfg["force_alternation_barriers"]
+    env.wall_bump_penalty = cfg["wall_bump_penalty"]
+
+
 # ── Observation encoding ───────────────────────────────────────────────────────
 
 def obs_to_tensor(obs: dict, device=None) -> torch.Tensor:
@@ -116,9 +179,10 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
     env = Figure8TMazeEnv(
         max_trials_per_episode=config.max_trials_per_episode,
-        step_cost=config.step_cost,
-        turn_cost=config.turn_cost,
     )
+    # Start with Stage 1 reward shaping
+    current_stage = 1
+    apply_stage(env, current_stage)
 
     model = RecurrentActorCritic(
         obs_dim=config.obs_dim,
@@ -144,7 +208,7 @@ def train(config: Config = None) -> RecurrentActorCritic:
     # ── CSV logging setup ──────────────────────────────────────────────────
     log_path = "training_log.csv"
     log_fields = [
-        "steps", "rollout",
+        "steps", "rollout", "stage",
         "mean_return", "mean_episode_length",
         "policy_loss", "value_loss", "entropy",
         "grad_norm",
@@ -161,9 +225,16 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
     while total_steps < config.num_train_steps:
 
+        # ── Curriculum stage check ─────────────────────────────────────────
+        new_stage = get_stage(total_steps, config)
+        if new_stage != current_stage:
+            current_stage = new_stage
+            apply_stage(env, current_stage)
+            print(f"  [curriculum] → Stage {current_stage} at step {total_steps:,}")
+
         # ── Collect rollout ────────────────────────────────────────────────
         # Detach hidden at each rollout boundary → truncated BPTT
-        hidden = hidden.detach()
+        hidden = (hidden[0].detach(), hidden[1].detach())
 
         obs_tensors = []
         actions_list = []
@@ -223,6 +294,9 @@ def train(config: Config = None) -> RecurrentActorCritic:
         entropies_t = torch.stack(entropies_list)                      # (T,)
 
         advantages = returns - values_t.detach()
+        advantages = advantages - advantages.mean()
+        if advantages.std() > 1e-7:
+            advantages = advantages / (advantages.std() + 1e-8)
 
         # ── Losses ────────────────────────────────────────────────────────
         policy_loss = -(log_probs_t * advantages).mean()
@@ -266,6 +340,7 @@ def train(config: Config = None) -> RecurrentActorCritic:
         csv_writer.writerow({
             "steps":               total_steps,
             "rollout":             rollout_idx,
+            "stage":               current_stage,
             "mean_return":         round(mean_ret, 4),
             "mean_episode_length": round(mean_len, 1),
             "policy_loss":         round(policy_loss.item(), 6),
@@ -277,7 +352,7 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
         if rollout_idx % config.log_interval == 0:
             print(
-                f"steps={total_steps:8d}  "
+                f"steps={total_steps:8d}  stage={current_stage}  "
                 f"return={mean_ret:6.2f}  "
                 f"ploss={policy_loss.item():7.4f}  "
                 f"vloss={value_loss.item():6.4f}  "

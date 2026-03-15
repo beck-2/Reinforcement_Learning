@@ -264,6 +264,21 @@ class Figure8TMazeEnv(MiniGridEnv):
         self.incorrect_reward = kwargs.pop("incorrect_reward", INCORRECT_ALTERNATION_REWARD)
         self.step_cost = kwargs.pop("step_cost", STEP_COST)
         self.turn_cost = kwargs.pop("turn_cost", TURN_COST)
+        # Curriculum shaping rewards (0 by default = no shaping)
+        self.foraging_reward = kwargs.pop("foraging_reward", 0.0)  # bonus for any well visit
+        self.loop_bonus = kwargs.pop("loop_bonus", 0.0)            # bonus for completing full circuit
+        self.wall_bump_penalty = kwargs.pop("wall_bump_penalty", 0.0)  # penalty for hitting walls/barriers
+
+        # Stage 1 dynamic barrier system
+        # When True, physical barriers guide the agent through the figure-8 circuit
+        self.use_stage1_barriers = kwargs.pop("use_stage1_barriers", False)
+        # When True, also place force-alternation barriers at (6,4)/(8,4) after each well visit
+        self.force_alternation_barriers = kwargs.pop("force_alternation_barriers", True)
+        # Placed barriers: event-triggered, temporary (none are permanent)
+        self._stage1_placed_barriers: set = set()
+        # Trailing barrier: always the most recently vacated cell (prevents backtracking)
+        self._trailing_barrier_cell: tuple = None
+        self._barrier_state: int = 0  # 0=stem, 1=choice, 2=left_return, 3=right_return
 
         # --- Start Position Configuration ---
         self.agent_start_pos = START_POS  # (7, 12) - base of stem
@@ -341,6 +356,14 @@ class Figure8TMazeEnv(MiniGridEnv):
         # Right well (10,4): agent must approach from the West → pose (9, 4, East=0)
         self.rewarded_poses_left = {(LEFT_WELL_LOC[0] + 1, LEFT_WELL_LOC[1], 2)}   # (5, 4, West)
         self.rewarded_poses_right = {(RIGHT_WELL_LOC[0] - 1, RIGHT_WELL_LOC[1], 0)} # (9, 4, East)
+
+    @property
+    def _dynamic_barriers(self) -> set:
+        """All currently active barriers: placed + trailing."""
+        s = set(self._stage1_placed_barriers)
+        if self._trailing_barrier_cell is not None:
+            s.add(self._trailing_barrier_cell)
+        return s
 
     # =========================================================================
     # GRID GENERATION - BUILD THE MAZE STRUCTURE
@@ -499,6 +522,17 @@ class Figure8TMazeEnv(MiniGridEnv):
         self._loop_phase = 0
         self._loop_arm_bottom = None  # (x, STEM_BOTTOM) for the arm just visited
 
+        # Reset Stage 1 barrier state
+        self._barrier_state = 0
+        self._trailing_barrier_cell = None
+        if self.use_stage1_barriers:
+            self._stage1_placed_barriers = {
+                (STEM_X - 1, STEM_BOTTOM),  # (6,12)
+                (STEM_X + 1, STEM_BOTTOM),  # (8,12)
+            }
+        else:
+            self._stage1_placed_barriers = set()
+
         # --- Reset Trajectory Tracking ---
         self.trajectory = []  # No poses recorded yet
         self.current_trial_trajectory = [(*self.agent_pos, self.agent_dir)]  # Start with initial pose
@@ -569,10 +603,17 @@ class Figure8TMazeEnv(MiniGridEnv):
             # Check what's in the forward cell
             fwd_cell = self.grid.get(*fwd_pos)
 
-            # Only move if cell is empty or can be overlapped (like wells)
-            if fwd_cell is None or fwd_cell.can_overlap():
-                self.agent_pos = tuple(fwd_pos)  # Update position
-            # If cell is a wall, agent stays in place (no movement)
+            # Only move if not blocked by a wall or a dynamic barrier
+            if tuple(fwd_pos) not in self._dynamic_barriers and \
+               (fwd_cell is None or fwd_cell.can_overlap()):
+                prev_pos = self.agent_pos
+                self.agent_pos = tuple(fwd_pos)
+                # Update trailing barrier (one step behind the agent)
+                if self.use_stage1_barriers:
+                    self._trailing_barrier_cell = prev_pos
+            else:
+                # Agent bumped into a wall or barrier
+                reward += self.wall_bump_penalty
 
         else:
             # Invalid action (should never happen if action_space is used correctly)
@@ -583,6 +624,10 @@ class Figure8TMazeEnv(MiniGridEnv):
         current_pose = (*self.agent_pos, self.agent_dir)
         self.trajectory.append(current_pose)  # Add to full episode trajectory
         self.current_trial_trajectory.append(current_pose)  # Add to current trial
+
+        # --- Stage 1 barrier update (position-triggered) ---
+        if self.use_stage1_barriers:
+            self._update_stage1_barriers_on_step()
 
         # --- Check for Choice/Reward ---
         # Determine if agent has reached a reward well
@@ -596,21 +641,26 @@ class Figure8TMazeEnv(MiniGridEnv):
         elif self._at_well_side == 'right' and current_pose not in self.rewarded_poses_right:
             self._at_well_side = None
 
-        # Advance figure-8 loop gate through its 3 phases
-        if self._loop_phase == 1 and self.agent_pos == self._loop_arm_bottom:
-            self._loop_phase = 2  # Reached arm bottom → now need stem bottom
-        elif self._loop_phase == 2 and self.agent_pos == (STEM_X, STEM_BOTTOM):
-            self._loop_phase = 3  # Reached stem bottom → now need T-junction
-        elif self._loop_phase == 3 and self.agent_pos == (STEM_X, STEM_TOP):
-            self._loop_phase = 0  # Reached T-junction → reward unlocked
+        if self.use_stage1_barriers:
+            # Stage 1: barriers enforce the circuit; _loop_phase not needed
+            if self._at_well_side != 'left' and current_pose in self.rewarded_poses_left:
+                choice_made = 'left'
+            elif self._at_well_side != 'right' and current_pose in self.rewarded_poses_right:
+                choice_made = 'right'
+        else:
+            # Stages 2/3: use loop-phase gate
+            if self._loop_phase == 1 and self.agent_pos == self._loop_arm_bottom:
+                self._loop_phase = 2
+            elif self._loop_phase == 2 and self.agent_pos == (STEM_X, STEM_BOTTOM):
+                self._loop_phase = 3
+            elif self._loop_phase == 3 and self.agent_pos == (STEM_X, STEM_TOP):
+                self._loop_phase = 0
+                reward += self.loop_bonus
 
-        # Check if current pose matches any rewarded pose for left well
-        if self._at_well_side != 'left' and self._loop_phase == 0 and current_pose in self.rewarded_poses_left:
-            choice_made = 'left'  # Agent chose left arm
-
-        # Check if current pose matches any rewarded pose for right well
-        elif self._at_well_side != 'right' and self._loop_phase == 0 and current_pose in self.rewarded_poses_right:
-            choice_made = 'right'  # Agent chose right arm
+            if self._at_well_side != 'left' and self._loop_phase == 0 and current_pose in self.rewarded_poses_left:
+                choice_made = 'left'
+            elif self._at_well_side != 'right' and self._loop_phase == 0 and current_pose in self.rewarded_poses_right:
+                choice_made = 'right'
 
         # --- Evaluate Alternation Rule ---
         # Paper Connection: "Correct alternations" were rewarded in the paper
@@ -619,6 +669,9 @@ class Figure8TMazeEnv(MiniGridEnv):
             # Agent made a choice! Now evaluate if it's correct
 
             self.trial_count += 1  # Increment trial counter
+
+            # Foraging bonus: reward any well visit (curriculum Stage-1 scaffold)
+            reward += self.foraging_reward
 
             # --- Case 1: First Trial of Episode ---
             if self.last_choice is None:
@@ -658,9 +711,14 @@ class Figure8TMazeEnv(MiniGridEnv):
             # This is the "episodic memory" component from the paper
             self.last_choice = choice_made
             self._at_well_side = choice_made  # Prevent re-triggering until agent leaves this well
-            # Start 3-stage figure-8 gate: arm bottom → stem bottom → T-junction
-            self._loop_arm_bottom = (LEFT_RETURN_X, STEM_BOTTOM) if choice_made == 'left' else (RIGHT_RETURN_X, STEM_BOTTOM)
-            self._loop_phase = 1
+
+            if self.use_stage1_barriers:
+                # Stage 1: update dynamic barriers to guide agent through circuit
+                self._update_stage1_barriers_on_choice(choice_made)
+            else:
+                # Stages 2/3: activate loop-phase gate
+                self._loop_arm_bottom = (LEFT_RETURN_X, STEM_BOTTOM) if choice_made == 'left' else (RIGHT_RETURN_X, STEM_BOTTOM)
+                self._loop_phase = 1
 
             # Reset trial trajectory (agent continues physically from well)
             self.current_trial_trajectory = [current_pose]
@@ -813,3 +871,56 @@ len(data['right_trials'])
             'right_trials': right_trials,
             'all_trials': self.trial_history,
         }
+
+    # =========================================================================
+    # STAGE 1 DYNAMIC BARRIER STATE MACHINE
+    # =========================================================================
+
+    def _update_stage1_barriers_on_step(self):
+        """
+        Position-triggered placed-barrier updates for Stage 1.
+        Called every step after agent_pos is updated.
+
+        The trailing barrier (one step behind) is updated separately in step().
+        Placed barriers here are all temporary — each is lifted at some point.
+
+        State transitions:
+          0 (stem traversal) → agent reaches T-junction (7,4) → 1 (choice)
+          2 (left return)    → agent reaches start (7,12)     → 0
+          3 (right return)   → agent reaches start (7,12)     → 0
+        """
+        pos = self.agent_pos
+
+        if self._barrier_state == 0 and pos == (STEM_X, STEM_TOP):
+            self._barrier_state = 1
+
+        elif self._barrier_state == 2 and pos == (STEM_X, STEM_BOTTOM):
+            # Agent completed left return — re-drop left flanking barrier
+            self._stage1_placed_barriers.add((STEM_X - 1, STEM_BOTTOM))    # (6,12)
+            self._barrier_state = 0
+
+        elif self._barrier_state == 3 and pos == (STEM_X, STEM_BOTTOM):
+            # Agent completed right return — re-drop right flanking barrier
+            self._stage1_placed_barriers.add((STEM_X + 1, STEM_BOTTOM))    # (8,12)
+            self._barrier_state = 0
+
+    def _update_stage1_barriers_on_choice(self, choice_made: str):
+        """
+        Choice-triggered placed-barrier updates for Stage 1.
+        Called immediately after a well reward is granted.
+
+        Lifts the flanking barrier on the return side so the agent can
+        traverse back to the start. Force-alternation barrier is also lifted.
+        """
+        if choice_made == 'left':
+            if self.force_alternation_barriers:
+                self._stage1_placed_barriers.add((STEM_X - 1, STEM_TOP))     # place (6,4) — block left arm
+                self._stage1_placed_barriers.discard((STEM_X + 1, STEM_TOP)) # lift (8,4) — right arm now open
+            self._stage1_placed_barriers.discard((STEM_X - 1, STEM_BOTTOM))  # lift (6,12) — open left return
+            self._barrier_state = 2
+        else:
+            if self.force_alternation_barriers:
+                self._stage1_placed_barriers.add((STEM_X + 1, STEM_TOP))     # place (8,4) — block right arm
+                self._stage1_placed_barriers.discard((STEM_X - 1, STEM_TOP)) # lift (6,4) — left arm now open
+            self._stage1_placed_barriers.discard((STEM_X + 1, STEM_BOTTOM))  # lift (8,12) — open right return
+            self._barrier_state = 3

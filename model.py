@@ -4,16 +4,16 @@ import torch.nn as nn
 
 class RecurrentActorCritic(nn.Module):
     """
-    Vanilla RNN actor-critic for the continuous alternation task.
+    LSTM actor-critic for the continuous alternation task.
 
     Architecture:
         obs → Linear(obs_dim, hidden) → Tanh
-            → RNN(hidden, hidden)
+            → LSTM(hidden, hidden)
             → actor head: Linear(hidden, num_actions)
             → critic head: Linear(hidden, 1)
 
     The recurrent state is the only source of memory — the observation
-    contains no explicit previous-choice signal, so the RNN must learn
+    contains no explicit previous-choice signal, so the LSTM must learn
     to remember trial history in order to alternate correctly.
     """
 
@@ -25,7 +25,7 @@ class RecurrentActorCritic(nn.Module):
             nn.Linear(obs_dim, hidden_size),
             nn.Tanh(),
         )
-        self.rnn = nn.GRU(hidden_size, hidden_size, batch_first=False)
+        self.rnn = nn.LSTM(hidden_size, hidden_size, batch_first=False)
         self.actor = nn.Linear(hidden_size, num_actions)
         self.critic = nn.Linear(hidden_size, 1)
 
@@ -40,8 +40,8 @@ class RecurrentActorCritic(nn.Module):
 
     def forward(
         self,
-        obs: torch.Tensor,       # (B, obs_dim)
-        hidden: torch.Tensor,    # (1, B, hidden_size)
+        obs: torch.Tensor,                          # (B, obs_dim)
+        hidden: tuple[torch.Tensor, torch.Tensor],  # ((1,B,H), (1,B,H))
     ):
         """
         Single-step forward pass.
@@ -49,14 +49,15 @@ class RecurrentActorCritic(nn.Module):
         Returns:
             logits:     (B, num_actions)
             value:      (B, 1)
-            new_hidden: (1, B, hidden_size)
+            new_hidden: (h, c) each (1, B, hidden_size)
         """
-        x = self.encoder(obs.unsqueeze(0))            # (1, B, hidden_size)
-        rnn_out, new_hidden = self.rnn(x, hidden)     # (1, B, hidden_size)
-        h = rnn_out.squeeze(0)                        # (B, hidden_size)
+        x = self.encoder(obs.unsqueeze(0))             # (1, B, hidden_size)
+        rnn_out, new_hidden = self.rnn(x, hidden)      # (1, B, hidden_size)
+        h = rnn_out.squeeze(0)                         # (B, hidden_size)
         return self.actor(h), self.critic(h), new_hidden
 
-    def init_hidden(self, batch_size: int = 1, device=None) -> torch.Tensor:
-        """Return a zeroed hidden state for the start of an episode."""
+    def init_hidden(self, batch_size: int = 1, device=None):
+        """Return zeroed (h, c) hidden state for the start of an episode."""
         device = device or next(self.parameters()).device
-        return torch.zeros(1, batch_size, self.hidden_size, device=device)
+        zeros = torch.zeros(1, batch_size, self.hidden_size, device=device)
+        return (zeros, zeros.clone())
