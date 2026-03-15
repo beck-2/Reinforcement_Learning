@@ -132,7 +132,7 @@ def main():
     else:
         print("No checkpoint found — evaluating untrained model (near-random baseline).")
 
-    trained = run_policy(model, config, num_episodes=config.eval_episodes, greedy=True)
+    trained = run_policy(model, config, num_episodes=config.eval_episodes, greedy=False)
     baseline = run_random(config, num_episodes=config.eval_episodes)
 
     os.makedirs(config.output_dir, exist_ok=True)

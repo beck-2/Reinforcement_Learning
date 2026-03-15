@@ -1,8 +1,8 @@
 {
-  "accuracy": 0.5363966710757553,
-  "accuracy_std": 0.07345303681238506,
-  "return": 17.0,
-  "return_std": 3.03315017762062,
+  "accuracy": 0.5262667112299466,
+  "accuracy_std": 0.05555048375236171,
+  "return": 16.1,
+  "return_std": 2.233830790368868,
   "length": 10000.0,
   "episodes": 20,
   "policy": "random"

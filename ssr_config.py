@@ -14,7 +14,7 @@ class SSRConfig:
     rollout_length: int = 256
     gamma: float = 0.97
     lr: float = 3e-4
-    entropy_coef: float = 0.02
+    entropy_coef: float = 0.005
     value_loss_coef: float = 0.5
     sr_loss_coef: float = 0.2
     sr_warmup_steps: int = 50_000
