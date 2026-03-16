@@ -2,62 +2,81 @@ import torch
 import torch.nn as nn
 
 
+class ActorNet(nn.Module):
+    def __init__(self, obs_dim: int, hidden_size: int, num_actions: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.encoder = nn.Sequential(nn.Linear(obs_dim, hidden_size), nn.Tanh())
+        self.rnn = nn.LSTM(hidden_size, hidden_size, batch_first=False)
+        self.head = nn.Linear(hidden_size, num_actions)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                gain = 1.0 if m is not self.head else 0.5
+                nn.init.orthogonal_(m.weight, gain=gain)
+                nn.init.zeros_(m.bias)
+        # Bias the actor toward "forward" (action 2) at initialization.
+        # Breaks the uniform-policy symmetry so the agent starts moving
+        # forward through the maze rather than spinning in place.
+        with torch.no_grad():
+            self.head.bias.copy_(torch.tensor([-0.5, -0.5, 0.5]))
+
+    def forward(self, obs, hidden):
+        x = self.encoder(obs.unsqueeze(0))
+        out, new_hidden = self.rnn(x, hidden)
+        return self.head(out.squeeze(0)), new_hidden
+
+    def init_hidden(self, batch_size=1, device=None):
+        device = device or next(self.parameters()).device
+        z = torch.zeros(1, batch_size, self.hidden_size, device=device)
+        return (z, z.clone())
+
+
+class CriticNet(nn.Module):
+    def __init__(self, obs_dim: int, hidden_size: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.encoder = nn.Sequential(nn.Linear(obs_dim, hidden_size), nn.Tanh())
+        self.rnn = nn.LSTM(hidden_size, hidden_size, batch_first=False)
+        self.head = nn.Linear(hidden_size, 1)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=1.0)
+                nn.init.zeros_(m.bias)
+
+    def forward(self, obs, hidden):
+        x = self.encoder(obs.unsqueeze(0))
+        out, new_hidden = self.rnn(x, hidden)
+        return self.head(out.squeeze(0)), new_hidden
+
+    def init_hidden(self, batch_size=1, device=None):
+        device = device or next(self.parameters()).device
+        z = torch.zeros(1, batch_size, self.hidden_size, device=device)
+        return (z, z.clone())
+
+
 class RecurrentActorCritic(nn.Module):
     """
-    LSTM actor-critic for the continuous alternation task.
+    Split actor-critic: separate encoder + LSTM + head for each.
+    Prevents the critic from hijacking the shared representation.
 
-    Architecture:
-        obs → Linear(obs_dim, hidden) → Tanh
-            → LSTM(hidden, hidden)
-            → actor head: Linear(hidden, num_actions)
-            → critic head: Linear(hidden, 1)
-
-    The recurrent state is the only source of memory — the observation
-    contains no explicit previous-choice signal, so the LSTM must learn
-    to remember trial history in order to alternate correctly.
+    hidden = (actor_hidden, critic_hidden)
+    each hidden is an LSTM state: ((h, c)) tuple of (1, B, H) tensors
     """
 
     def __init__(self, obs_dim: int, hidden_size: int, num_actions: int):
         super().__init__()
         self.hidden_size = hidden_size
+        self.actor = ActorNet(obs_dim, hidden_size, num_actions)
+        self.critic = CriticNet(obs_dim, hidden_size)
 
-        self.encoder = nn.Sequential(
-            nn.Linear(obs_dim, hidden_size),
-            nn.Tanh(),
-        )
-        self.rnn = nn.LSTM(hidden_size, hidden_size, batch_first=False)
-        self.actor = nn.Linear(hidden_size, num_actions)
-        self.critic = nn.Linear(hidden_size, 1)
-
-        self._init_weights()
-
-    def _init_weights(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                gain = 0.01 if module is self.actor else 1.0
-                nn.init.orthogonal_(module.weight, gain=gain)
-                nn.init.zeros_(module.bias)
-
-    def forward(
-        self,
-        obs: torch.Tensor,                          # (B, obs_dim)
-        hidden: tuple[torch.Tensor, torch.Tensor],  # ((1,B,H), (1,B,H))
-    ):
-        """
-        Single-step forward pass.
-
-        Returns:
-            logits:     (B, num_actions)
-            value:      (B, 1)
-            new_hidden: (h, c) each (1, B, hidden_size)
-        """
-        x = self.encoder(obs.unsqueeze(0))             # (1, B, hidden_size)
-        rnn_out, new_hidden = self.rnn(x, hidden)      # (1, B, hidden_size)
-        h = rnn_out.squeeze(0)                         # (B, hidden_size)
-        return self.actor(h), self.critic(h), new_hidden
+    def forward(self, obs, hidden):
+        actor_h, critic_h = hidden
+        logits, new_actor_h = self.actor(obs, actor_h)
+        value, new_critic_h = self.critic(obs, critic_h)
+        return logits, value, (new_actor_h, new_critic_h)
 
     def init_hidden(self, batch_size: int = 1, device=None):
-        """Return zeroed (h, c) hidden state for the start of an episode."""
-        device = device or next(self.parameters()).device
-        zeros = torch.zeros(1, batch_size, self.hidden_size, device=device)
-        return (zeros, zeros.clone())
+        return (
+            self.actor.init_hidden(batch_size, device),
+            self.critic.init_hidden(batch_size, device),
+        )

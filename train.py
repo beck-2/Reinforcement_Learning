@@ -38,7 +38,8 @@ STAGE_CONFIGS = {
         loop_bonus=0.2,
         use_stage1_barriers=True,
         force_alternation_barriers=True,
-        wall_bump_penalty=-0.1,
+        wall_bump_penalty=-0.005,
+        potential_shaping_coef=0.05,
     ),
     2: dict(
         step_cost=-0.001,
@@ -49,7 +50,8 @@ STAGE_CONFIGS = {
         loop_bonus=0.0,
         use_stage1_barriers=True,
         force_alternation_barriers=False,
-        wall_bump_penalty=-0.1,
+        wall_bump_penalty=0.0,
+        potential_shaping_coef=0.0,
     ),
     3: dict(
         step_cost=-0.001,
@@ -60,7 +62,8 @@ STAGE_CONFIGS = {
         loop_bonus=0.0,
         use_stage1_barriers=False,
         force_alternation_barriers=False,
-        wall_bump_penalty=-0.1,
+        wall_bump_penalty=0.0,
+        potential_shaping_coef=0.0,
     ),
 }
 
@@ -85,6 +88,7 @@ def apply_stage(env: Figure8TMazeEnv, stage: int) -> None:
     env.use_stage1_barriers = cfg["use_stage1_barriers"]
     env.force_alternation_barriers = cfg["force_alternation_barriers"]
     env.wall_bump_penalty = cfg["wall_bump_penalty"]
+    env.potential_shaping_coef = cfg["potential_shaping_coef"]
 
 
 # ── Observation encoding ───────────────────────────────────────────────────────
@@ -190,7 +194,8 @@ def train(config: Config = None) -> RecurrentActorCritic:
         num_actions=config.num_actions,
     ).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    actor_optimizer  = torch.optim.Adam(model.actor.parameters(),  lr=config.lr)
+    critic_optimizer = torch.optim.Adam(model.critic.parameters(), lr=config.lr * 0.1)
 
     # Running environment state
     obs, _ = env.reset()
@@ -234,7 +239,10 @@ def train(config: Config = None) -> RecurrentActorCritic:
 
         # ── Collect rollout ────────────────────────────────────────────────
         # Detach hidden at each rollout boundary → truncated BPTT
-        hidden = (hidden[0].detach(), hidden[1].detach())
+        hidden = (
+            (hidden[0][0].detach(), hidden[0][1].detach()),
+            (hidden[1][0].detach(), hidden[1][1].detach()),
+        )
 
         obs_tensors = []
         actions_list = []
@@ -303,13 +311,10 @@ def train(config: Config = None) -> RecurrentActorCritic:
         value_loss = F.mse_loss(values_t, returns)
         entropy_loss = -entropies_t.mean()
 
-        loss = (
-            policy_loss
-            + config.value_loss_coef * value_loss
-            + config.entropy_coef * entropy_loss
-        )
+        actor_loss = policy_loss + config.entropy_coef * entropy_loss
+        critic_loss = config.value_loss_coef * value_loss
 
-        if torch.isnan(loss):
+        if torch.isnan(actor_loss) or torch.isnan(critic_loss):
             print(f"WARNING: NaN loss at step {total_steps}. Resetting episode state.")
             obs, _ = env.reset()
             hidden = model.init_hidden(device=device)
@@ -317,15 +322,20 @@ def train(config: Config = None) -> RecurrentActorCritic:
             continue
 
         # ── Optimization step ──────────────────────────────────────────────
-        optimizer.zero_grad()
-        loss.backward()
+        actor_optimizer.zero_grad()
+        actor_loss.backward(retain_graph=True)
+
+        critic_optimizer.zero_grad()
+        critic_loss.backward()
 
         grad_info = gradient_diagnostics(model)
         if grad_info["has_nan"] or grad_info["has_inf"]:
             print(f"WARNING: NaN/Inf gradients at step {total_steps}!")
 
-        torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
-        optimizer.step()
+        torch.nn.utils.clip_grad_norm_(model.actor.parameters(), config.grad_clip)
+        torch.nn.utils.clip_grad_norm_(model.critic.parameters(), config.grad_clip)
+        actor_optimizer.step()
+        critic_optimizer.step()
 
         if params_have_nan(model):
             print(f"ERROR: NaN in model parameters at step {total_steps}. Stopping.")

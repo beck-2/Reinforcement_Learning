@@ -12,10 +12,10 @@ class Config:
     rollout_length: int = 1024
     gamma: float = 0.97
     lr: float = 3e-4
-    entropy_coef: float = 0.001
-    value_loss_coef: float = 0.5
+    entropy_coef: float = 0.0
+    value_loss_coef: float = 0.25
     grad_clip: float = 0.5
-    num_train_steps: int = 2_000_000
+    num_train_steps: int = 500_000
 
     # Environment
     max_trials_per_episode: int = 50

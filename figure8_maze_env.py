@@ -265,9 +265,10 @@ class Figure8TMazeEnv(MiniGridEnv):
         self.step_cost = kwargs.pop("step_cost", STEP_COST)
         self.turn_cost = kwargs.pop("turn_cost", TURN_COST)
         # Curriculum shaping rewards (0 by default = no shaping)
-        self.foraging_reward = kwargs.pop("foraging_reward", 0.0)  # bonus for any well visit
-        self.loop_bonus = kwargs.pop("loop_bonus", 0.0)            # bonus for completing full circuit
+        self.foraging_reward = kwargs.pop("foraging_reward", 0.0)       # bonus for any well visit
+        self.loop_bonus = kwargs.pop("loop_bonus", 0.0)                # bonus for completing full circuit
         self.wall_bump_penalty = kwargs.pop("wall_bump_penalty", 0.0)  # penalty for hitting walls/barriers
+        self.potential_shaping_coef = kwargs.pop("potential_shaping_coef", 0.0)  # stage-1 only distance shaping
 
         # Stage 1 dynamic barrier system
         # When True, physical barriers guide the agent through the figure-8 circuit
@@ -576,6 +577,13 @@ class Figure8TMazeEnv(MiniGridEnv):
 
         # --- Initialize Reward ---
         reward = 0.0  # Start with zero, will add components below
+
+        # --- Potential shaping: record distance before action ---
+        if self.potential_shaping_coef != 0.0:
+            ax, ay = self.agent_pos
+            lx, ly = LEFT_WELL_LOC
+            rx, ry = RIGHT_WELL_LOC
+            _pre_dist = min(abs(ax - lx) + abs(ay - ly), abs(ax - rx) + abs(ay - ry))
         terminated = False  # Episode not done yet
         truncated = False   # Not timed out yet
 
@@ -624,6 +632,14 @@ class Figure8TMazeEnv(MiniGridEnv):
         current_pose = (*self.agent_pos, self.agent_dir)
         self.trajectory.append(current_pose)  # Add to full episode trajectory
         self.current_trial_trajectory.append(current_pose)  # Add to current trial
+
+        # --- Potential shaping bonus ---
+        if self.potential_shaping_coef != 0.0:
+            ax, ay = self.agent_pos
+            lx, ly = LEFT_WELL_LOC
+            rx, ry = RIGHT_WELL_LOC
+            _post_dist = min(abs(ax - lx) + abs(ay - ly), abs(ax - rx) + abs(ay - ry))
+            reward += self.potential_shaping_coef * (_pre_dist - _post_dist)
 
         # --- Stage 1 barrier update (position-triggered) ---
         if self.use_stage1_barriers:

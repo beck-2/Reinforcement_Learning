@@ -46,6 +46,8 @@ hidden = model.init_hidden(device=device)
 
 frames = []
 last_reward = 0.0
+last_pos = None
+stuck_count = 0
 
 for step in range(MAX_STEPS):
     frames.append(annotate(env.render(), env, step, last_reward))
@@ -53,7 +55,16 @@ for step in range(MAX_STEPS):
     with torch.no_grad():
         obs_t = obs_to_tensor(obs, device=device)
         logits, _, hidden = model(obs_t, hidden)
-        action = torch.argmax(logits, dim=-1).item()  # greedy
+        action = torch.distributions.Categorical(logits=logits).sample().item()
+
+    if env.agent_pos == last_pos:
+        stuck_count += 1
+        if stuck_count >= 5:
+            action = np.random.choice([0, 1])
+            stuck_count = 0
+    else:
+        stuck_count = 0
+    last_pos = env.agent_pos
 
     obs, last_reward, terminated, truncated, _ = env.step(action)
 
