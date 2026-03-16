@@ -19,7 +19,7 @@ class PPOConfig:
     gae_lambda: float = 0.95      # GAE λ — low variance, slight bias
     gamma: float = 0.97           # discount factor (same as A2C baseline)
     value_loss_coef: float = 0.5  # critic loss weight
-    entropy_coef: float = 0.01    # small entropy bonus to prevent premature collapse
+    entropy_coef: float = 0.05    # higher to prevent premature policy collapse
     grad_clip: float = 0.5        # global gradient norm clip
 
     # --- Optimizers (separate for actor and critic) ---

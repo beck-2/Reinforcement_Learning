@@ -47,7 +47,7 @@ STAGE_CONFIGS: dict[int, dict] = {
         turn_cost=0.0,
         correct_reward=1.0,
         incorrect_reward=0.0,
-        foraging_reward=0.0,
+        foraging_reward=0.1,
         loop_bonus=0.0,
         use_stage1_barriers=True,
         force_alternation_barriers=False,
@@ -70,11 +70,27 @@ STAGE_CONFIGS: dict[int, dict] = {
 
 
 def make_env(cfg: PPOConfig, stage: int) -> Figure8TMazeEnv:
+    """Create a new env for the given stage (used in tests and initial setup)."""
     sc = STAGE_CONFIGS[stage]
     return Figure8TMazeEnv(
         max_trials_per_episode=cfg.max_trials_per_episode,
         **sc,
     )
+
+
+def apply_stage(env: Figure8TMazeEnv, stage: int) -> None:
+    """Update env reward/barrier attributes in-place for the given curriculum stage."""
+    cfg = STAGE_CONFIGS[stage]
+    env.step_cost = cfg["step_cost"]
+    env.turn_cost = cfg["turn_cost"]
+    env.correct_reward = cfg["correct_reward"]
+    env.incorrect_reward = cfg["incorrect_reward"]
+    env.foraging_reward = cfg["foraging_reward"]
+    env.loop_bonus = cfg["loop_bonus"]
+    env.use_stage1_barriers = cfg["use_stage1_barriers"]
+    env.force_alternation_barriers = cfg["force_alternation_barriers"]
+    env.wall_bump_penalty = cfg["wall_bump_penalty"]
+    env.potential_shaping_coef = cfg["potential_shaping_coef"]
 
 
 # ---------------------------------------------------------------------------
@@ -443,8 +459,7 @@ def train(cfg: PPOConfig | None = None, start_stage: int = 1, max_steps: int | N
         if new_stage != current_stage:
             print(f"\n[{steps_done:,}] Transitioning to stage {new_stage}")
             current_stage = new_stage
-            env.close()
-            env = make_env(cfg, current_stage)
+            apply_stage(env, current_stage)
             hidden = model.init_hidden(device=device)
             obs_dict, _ = env.reset()
             obs = encode_obs(obs_dict).to(device)
