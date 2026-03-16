@@ -45,7 +45,7 @@ class PPOConfig:
     step_cost: float = 0.0
 
     # --- Logging ---
-    log_interval: int = 100       # log every N rollouts
+    log_interval: int = 10        # log every N rollouts
     eval_interval: int = 1000     # evaluate every N rollouts
     eval_episodes: int = 10
     checkpoint_path: str = "checkpoint_ppo.pt"

@@ -159,14 +159,19 @@ def collect_rollout(
     env: Figure8TMazeEnv,
     model: RecurrentActorCritic,
     hidden: tuple,
+    obs: torch.Tensor,
     cfg: PPOConfig,
     device: torch.device,
-) -> tuple[RolloutBuffer, tuple, dict]:
+) -> tuple[RolloutBuffer, tuple, torch.Tensor, dict]:
     """
     Collect `cfg.rollout_length` steps from the environment.
 
+    Does NOT reset the env at the start — the caller owns the env state and
+    passes in the current obs.  Episodes span rollout boundaries naturally.
     Resets hidden state at episode boundaries.  Records the hidden state at
     the beginning of each new episode so PPO update can replay sequentially.
+
+    Returns: (buffer, hidden, next_obs, stats)
     """
     T = cfg.rollout_length
 
@@ -186,12 +191,8 @@ def collect_rollout(
     ep_trials: list[int] = []
     cur_ep_reward = 0.0
     cur_ep_len = 0
-    cur_ep_correct = 0
-    cur_ep_trials = 0
 
-    obs_dict, _ = env.reset()
-    obs = encode_obs(obs_dict).to(device)
-    # Record initial hidden state
+    # Record hidden state at the start of this rollout segment
     episode_starts.append((0, RecurrentActorCritic.detach_hidden(hidden)))
 
     model.eval()
@@ -217,29 +218,25 @@ def collect_rollout(
 
             cur_ep_reward += reward
             cur_ep_len += 1
-            cur_ep_trials = info.get("trial_count", 0)
-            cur_ep_correct += int(info.get("correct_alternation", False))
 
             if done:
                 ep_rewards.append(cur_ep_reward)
                 ep_lengths.append(cur_ep_len)
-                ep_correct.append(cur_ep_correct)
-                ep_trials.append(cur_ep_trials)
+                ep_correct.append(info.get("correct_trials", 0))
+                ep_trials.append(info.get("trial_count", 1))
                 cur_ep_reward = 0.0
                 cur_ep_len = 0
-                cur_ep_correct = 0
-                cur_ep_trials = 0
 
                 obs_dict, _ = env.reset()
+                obs = encode_obs(obs_dict).to(device)
                 hidden = model.init_hidden(device=device)
                 if t + 1 < T:
                     episode_starts.append((t + 1, RecurrentActorCritic.detach_hidden(hidden)))
             else:
                 hidden = RecurrentActorCritic.detach_hidden(new_hidden)
+                obs = encode_obs(obs_dict).to(device)
 
-            obs = encode_obs(obs_dict).to(device)
-
-        # Bootstrap value for last step
+        # Bootstrap value for last step (obs is now the next obs after the rollout)
         _, next_val, _ = model(obs.unsqueeze(0), hidden)
         next_value = next_val[0].detach()
 
@@ -273,7 +270,7 @@ def collect_rollout(
         dones=done_buf,
         episode_starts=episode_starts,
     )
-    return buf, hidden, stats
+    return buf, hidden, obs, stats
 
 
 # ---------------------------------------------------------------------------
@@ -413,6 +410,8 @@ def train(cfg: PPOConfig | None = None, start_stage: int = 1, max_steps: int | N
     env = make_env(cfg, current_stage)
 
     hidden = model.init_hidden(device=device)
+    obs_dict, _ = env.reset()
+    obs = encode_obs(obs_dict).to(device)
 
     # CSV logging
     csv_path = "training_log_ppo.csv"
@@ -446,10 +445,12 @@ def train(cfg: PPOConfig | None = None, start_stage: int = 1, max_steps: int | N
             current_stage = new_stage
             env.close()
             env = make_env(cfg, current_stage)
-            hidden = model.init_hidden(device=device)  # fresh hidden at stage transition
+            hidden = model.init_hidden(device=device)
+            obs_dict, _ = env.reset()
+            obs = encode_obs(obs_dict).to(device)
 
         # Collect rollout
-        buf, hidden, collect_stats = collect_rollout(env, model, hidden, cfg, device)
+        buf, hidden, obs, collect_stats = collect_rollout(env, model, hidden, obs, cfg, device)
         steps_done += cfg.rollout_length
 
         # PPO update

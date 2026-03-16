@@ -18,7 +18,7 @@ from torch.distributions import Categorical
 
 from config import PPOConfig
 from model import RecurrentActorCritic, ActorNet, CriticNet
-from ppo import compute_gae, encode_obs, collect_rollout, ppo_update, make_env
+from ppo import compute_gae, encode_obs, collect_rollout, ppo_update, make_env, STAGE_CONFIGS
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +245,10 @@ class TestIntegration(unittest.TestCase):
 
     def test_collect_rollout_returns_correct_shapes(self):
         env = make_env(self.cfg, stage=1)
+        obs_dict, _ = env.reset()
+        obs = encode_obs(obs_dict)
         hidden = self.model.init_hidden()
-        buf, new_hidden, stats = collect_rollout(env, self.model, hidden, self.cfg, self.device)
+        buf, new_hidden, next_obs, stats = collect_rollout(env, self.model, hidden, obs, self.cfg, self.device)
         T = self.cfg.rollout_length
         self.assertEqual(buf.obs.shape, (T, self.cfg.obs_dim))
         self.assertEqual(buf.actions.shape, (T,))
@@ -255,8 +257,10 @@ class TestIntegration(unittest.TestCase):
 
     def test_ppo_update_runs_without_error(self):
         env = make_env(self.cfg, stage=1)
+        obs_dict, _ = env.reset()
+        obs = encode_obs(obs_dict)
         hidden = self.model.init_hidden()
-        buf, _, _ = collect_rollout(env, self.model, hidden, self.cfg, self.device)
+        buf, _, _, _ = collect_rollout(env, self.model, hidden, obs, self.cfg, self.device)
         actor_opt = torch.optim.Adam(self.model.actor.parameters(), lr=3e-4)
         critic_opt = torch.optim.Adam(self.model.critic.parameters(), lr=3e-5)
         stats = ppo_update(self.model, buf, actor_opt, critic_opt, self.cfg, self.device)
@@ -266,8 +270,10 @@ class TestIntegration(unittest.TestCase):
 
     def test_model_parameters_change_after_update(self):
         env = make_env(self.cfg, stage=1)
+        obs_dict, _ = env.reset()
+        obs = encode_obs(obs_dict)
         hidden = self.model.init_hidden()
-        buf, _, _ = collect_rollout(env, self.model, hidden, self.cfg, self.device)
+        buf, _, _, _ = collect_rollout(env, self.model, hidden, obs, self.cfg, self.device)
 
         before = [p.clone().detach() for p in self.model.parameters()]
 
