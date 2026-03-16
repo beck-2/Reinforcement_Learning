@@ -658,11 +658,15 @@ class Figure8TMazeEnv(MiniGridEnv):
             self._at_well_side = None
 
         if self.use_stage1_barriers:
-            # Stage 1: barriers enforce the circuit; _loop_phase not needed
-            if self._at_well_side != 'left' and current_pose in self.rewarded_poses_left:
-                choice_made = 'left'
-            elif self._at_well_side != 'right' and current_pose in self.rewarded_poses_right:
-                choice_made = 'right'
+            # Gate rewards on barrier_state 0 (stem) or 1 (at T-junction).
+            # States 2/3 mean the agent is in a return arm after just making a
+            # choice — blocking here prevents re-triggering the same well while
+            # the agent oscillates within the arm before leaving.
+            if self._barrier_state in (0, 1):
+                if self._at_well_side != 'left' and current_pose in self.rewarded_poses_left:
+                    choice_made = 'left'
+                elif self._at_well_side != 'right' and current_pose in self.rewarded_poses_right:
+                    choice_made = 'right'
         else:
             # Stages 2/3: use loop-phase gate
             if self._loop_phase == 1 and self.agent_pos == self._loop_arm_bottom:
