@@ -651,10 +651,15 @@ class Figure8TMazeEnv(MiniGridEnv):
         choice_made = None     # Will be 'left', 'right', or None
         choice_correct = None  # Will be True, False, or None
 
-        # Clear per-side guard once agent leaves that side's rewarded poses
-        if self._at_well_side == 'left' and current_pose not in self.rewarded_poses_left:
+        # Clear per-side guard once agent's *position* leaves the rewarded cell.
+        # Must check position only (not full pose) so that turning in place at
+        # the well does not reset the guard and re-trigger the same reward.
+        agent_xy = tuple(self.agent_pos)
+        left_cell  = (LEFT_WELL_LOC[0] + 1, LEFT_WELL_LOC[1])   # (5, 4)
+        right_cell = (RIGHT_WELL_LOC[0] - 1, RIGHT_WELL_LOC[1]) # (9, 4)
+        if self._at_well_side == 'left' and agent_xy != left_cell:
             self._at_well_side = None
-        elif self._at_well_side == 'right' and current_pose not in self.rewarded_poses_right:
+        elif self._at_well_side == 'right' and agent_xy != right_cell:
             self._at_well_side = None
 
         if self.use_stage1_barriers:
