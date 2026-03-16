@@ -15,7 +15,7 @@ class Config:
     entropy_coef: float = 0.0
     value_loss_coef: float = 0.25
     grad_clip: float = 0.5
-    num_train_steps: int = 500_000
+    num_train_steps: int = 2_000_000
 
     # Environment
     max_trials_per_episode: int = 50
