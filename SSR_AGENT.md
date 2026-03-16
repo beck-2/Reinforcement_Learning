@@ -29,7 +29,7 @@ Environment observation includes:
 **Agent input (by design):**
 - `position_vector` and `direction` only.
 - `last_choice` and `trial_number` are deliberately excluded so the RNN must store memory internally.
- - Optional derived cues (enabled by default): `start_flag` and `stem_sector`, both computed from position.
+- Optional derived cues (enabled by default): `start_flag` and `stem_sector`, both computed from position.
 
 Input encoding (default):
 - Position normalized by `MAZE_SIZE` → 2 floats in `[0,1]`
@@ -53,8 +53,9 @@ The SR loss is mean squared error between `M(s_t)` and `M_target`.
 Total loss combines:
 - Policy loss (A2C)
 - Value loss (A2C)
-- Entropy bonus (exploration)
+- Entropy bonus (exploration, annealed)
 - SR TD loss (predictive map)
+- Choice supervision at the T-junction when `last_choice` is available (helps ceiling performance)
 
 ## Default hyperparameters
 Defined in `ssr_config.py`:
@@ -63,10 +64,12 @@ Defined in `ssr_config.py`:
 - `rollout_length = 256`
 - `gamma = 0.97`
 - `lr = 3e-4`
-- `entropy_coef = 0.02`
+- `entropy_coef = 0.005`
 - `value_loss_coef = 0.5`
 - `sr_loss_coef = 0.2`
 - `sr_warmup_steps = 50_000`
+- `choice_aux_coef = 0.5`
+- `choice_aux_warmup_steps = 50_000`
 - `grad_clip = 0.5`
 - `num_train_steps = 2_000_000`
 - `max_trials_per_episode = 50`

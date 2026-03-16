@@ -75,8 +75,9 @@ def plot_baseline(trained_path: str, baseline_path: str, out_path: str):
     with open(baseline_path) as f:
         baseline = json.load(f)
 
-    labels = ["Trained", "Random"]
-    acc = [trained["accuracy"], baseline["accuracy"]]
+    trained_acc = trained["memory"]["accuracy"] if "memory" in trained else trained.get("accuracy", 0.0)
+    labels = ["Trained (memory)", "Random"]
+    acc = [trained_acc, baseline["accuracy"]]
 
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.bar(labels, acc, color=["#4CAF50", "#9E9E9E"])

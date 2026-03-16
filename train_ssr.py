@@ -22,6 +22,7 @@ from figure8_maze_env import Figure8TMazeEnv
 from constants import (
     MAZE_SIZE,
     START_POS,
+    CHOICE_Y,
     STEM_X,
     SECTOR_1_RANGE,
     SECTOR_2_RANGE,
@@ -31,6 +32,22 @@ from constants import (
 from ssr_config import SSRConfig
 from ssr_model import SSRRecurrentActorCritic
 
+_DIR_TO_VEC = {0: (1,0), 1: (0,1), 2: (-1,0), 3: (0,-1)}
+
+def _forward_open(env, direction):
+    x, y = env.agent_pos
+    dx, dy = _DIR_TO_VEC[direction]
+    cell = env.grid.get(x+dx, y+dy)
+    return cell is None or cell.can_overlap()
+
+def _valid_action_mask(env, device):
+    d = env.agent_dir
+    if _forward_open(env, d):
+        return torch.tensor([0, 0, 1], dtype=torch.bool, device=device), False
+    left_open  = _forward_open(env, (d-1) % 4)
+    right_open = _forward_open(env, (d+1) % 4)
+    decision = left_open and right_open
+    return torch.tensor([left_open, right_open, 0], dtype=torch.bool, device=device), decision
 
 # ── Observation encoding ───────────────────────────────────────────────────────
 
@@ -42,6 +59,8 @@ def obs_to_tensor(obs: dict, config: SSRConfig, device=None) -> torch.Tensor:
     Optionally includes last_choice if config.use_last_choice is True.
     Shape: (1, obs_dim)
     """
+    at_start = 1.0 if (int(obs["position_vector"][0]) == START_POS[0] and 
+                   int(obs["position_vector"][1]) == START_POS[1]) else 0.0
     pos = obs["position_vector"] / MAZE_SIZE          # (2,) in [0, 1]
     d = int(obs["direction"])
     dir_oh = np.zeros(4, dtype=np.float32)
@@ -160,7 +179,7 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
         "steps", "rollout",
         "mean_return", "mean_episode_length",
         "policy_loss", "value_loss", "entropy",
-        "sr_loss", "grad_norm",
+        "sr_loss", "choice_loss", "grad_norm",
     ]
     log_file = open(config.training_log_path, "w", newline="")
     csv_writer = csv.DictWriter(log_file, fieldnames=log_fields)
@@ -173,33 +192,64 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
     print(f"  metrics → {config.training_log_path}")
 
     while total_steps < config.num_train_steps:
-        hidden = hidden.detach()
+        if isinstance(hidden, tuple):
+            hidden = (hidden[0].detach(), hidden[1].detach())
+        else:
+            hidden = hidden.detach()
 
         rewards_list = []
         dones_list = []
+        return_dones_list = []
         values_list = []
         log_probs_list = []
         entropies_list = []
         sr_list = []
         phi_list = []
+        decision_mask_list = []
+        choice_logits_list = []
+        choice_labels_list = []
+
+        prev_trial_count = env.trial_count
 
         for _ in range(config.rollout_length):
             obs_t = obs_to_tensor(obs, config, device=device)
+            # After obs_to_tensor, print first rollout only:
+            if rollout_idx == 0 and total_steps < 20:
+                print(f"obs={obs_t.squeeze().tolist()}")
+                print(f"start_flag={obs_t.squeeze()[-2].item():.1f} "
+                    f"sector={obs_t.squeeze()[-1].item():.2f} "
+                    f"pos={obs['position_vector']}")
+
             logits, value, sr_pred, new_hidden, phi = model(obs_t, hidden)
 
-            dist = Categorical(logits=logits)
-            action = dist.sample()
+            mask, decision = _valid_action_mask(env, device)
+            masked_logits = logits.masked_fill(~mask.unsqueeze(0), -1e9)
+            dist_masked = Categorical(logits=masked_logits)
+            dist_raw    = Categorical(logits=logits)
+            action = dist_masked.sample()
+            log_probs_list.append(dist_masked.log_prob(action))
+            entropies_list.append(dist_masked.entropy())
+            decision_mask_list.append(1.0 if decision else 0.0)
 
             next_obs, reward, terminated, truncated, info = env.step(action.item())
             done = terminated or truncated
+            trial_done = info.get("trial_count", prev_trial_count) != prev_trial_count
+            prev_trial_count = info.get("trial_count", prev_trial_count)
 
             rewards_list.append(float(reward))
             dones_list.append(done)
+            return_dones_list.append(done or trial_done)
             values_list.append(value.squeeze(0))
-            log_probs_list.append(dist.log_prob(action))
-            entropies_list.append(dist.entropy())
             sr_list.append(sr_pred.squeeze(0))
             phi_list.append(phi.squeeze(0))
+            # Auxiliary: supervised alternation at choice point when last_choice known
+            if int(obs["position_vector"][0]) == STEM_X and int(obs["position_vector"][1]) == CHOICE_Y:
+                last_choice = int(obs["last_choice"])
+                if last_choice in (1, 2):
+                    # 1=left -> correct=right(1), 2=right -> correct=left(0)
+                    target = 1 if last_choice == 1 else 0
+                    choice_logits_list.append(logits.squeeze(0)[:2])
+                    choice_labels_list.append(target)
 
             current_ep_reward += reward
             current_ep_steps += 1
@@ -224,7 +274,7 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
             sr_boot = sr_boot.squeeze(0)
 
         # Returns and advantages
-        returns_np = compute_returns(rewards_list, dones_list, last_val_scalar, config.gamma)
+        returns_np = compute_returns(rewards_list, return_dones_list, last_val_scalar, config.gamma)
         returns = torch.tensor(returns_np, dtype=torch.float32, device=device)
 
         values_t = torch.stack(values_list).squeeze(-1)         # (T,)
@@ -242,18 +292,29 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
 
         sr_loss = F.mse_loss(sr_preds, sr_target)
 
-        # Losses
-        policy_loss = -(log_probs_t * advantages).mean()
+        # Losses (only train policy at decision points)
+        decision_mask = torch.tensor(decision_mask_list, dtype=torch.float32, device=device)
+        denom = max(1.0, float(decision_mask.sum().item()))
+        policy_loss = -((log_probs_t * advantages) * decision_mask).sum() / denom
         value_loss = F.mse_loss(values_t, returns)
-        entropy_loss = -entropies_t.mean()
+        entropy_loss = -((entropies_t * decision_mask).sum() / denom)
 
         sr_scale = min(1.0, total_steps / max(1, config.sr_warmup_steps))
+        choice_scale = min(1.0, total_steps / max(1, config.choice_aux_warmup_steps))
+        entropy_coef = config.entropy_coef * max(0.1, 1.0 - total_steps / max(1, config.num_train_steps))
         loss = (
             policy_loss
             + config.value_loss_coef * value_loss
-            + config.entropy_coef * entropy_loss
+            + entropy_coef * entropy_loss
             + (config.sr_loss_coef * sr_scale) * sr_loss
         )
+        if choice_logits_list:
+            choice_logits = torch.stack(choice_logits_list)
+            choice_labels = torch.tensor(choice_labels_list, dtype=torch.long, device=device)
+            choice_loss = F.cross_entropy(choice_logits, choice_labels)
+            loss = loss + config.choice_aux_coef * choice_scale * choice_loss
+        else:
+            choice_loss = torch.tensor(0.0, device=device)
 
         if torch.isnan(loss):
             print(f"WARNING: NaN loss at step {total_steps}. Resetting episode state.")
@@ -286,6 +347,7 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
             "value_loss":          round(value_loss.item(), 6),
             "entropy":             round(entropies_t.mean().item(), 6),
             "sr_loss":             round(sr_loss.item(), 6),
+            "choice_loss":         round(choice_loss.item(), 6),
             "grad_norm":           round(grad_info["grad_norm"], 6),
         })
         log_file.flush()
@@ -297,6 +359,7 @@ def train(config: SSRConfig) -> SSRRecurrentActorCritic:
                 f"ploss={policy_loss.item():7.4f}  "
                 f"vloss={value_loss.item():6.4f}  "
                 f"sr={sr_loss.item():6.4f}  "
+                f"closs={choice_loss.item():6.4f}  "
                 f"ent={entropies_t.mean().item():.3f}  "
                 f"gnorm={grad_info['grad_norm']:.3f}"
             )

@@ -18,6 +18,8 @@ class SSRConfig:
     value_loss_coef: float = 0.5
     sr_loss_coef: float = 0.2
     sr_warmup_steps: int = 50_000
+    choice_aux_coef: float = 0.5
+    choice_aux_warmup_steps: int = 50_000
     grad_clip: float = 0.5
     num_train_steps: int = 200000
     seed: int = 0
