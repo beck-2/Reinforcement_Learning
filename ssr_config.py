@@ -21,7 +21,7 @@ class SSRConfig:
     choice_aux_coef: float = 0.5
     choice_aux_warmup_steps: int = 50_000
     grad_clip: float = 0.5
-    num_train_steps: int = 200000
+    num_train_steps: int = 2000000
     seed: int = 0
 
     # Environment — sparse reward per spec

@@ -135,7 +135,8 @@ def main():
     if args.episodes is not None:
         config.eval_episodes = args.episodes
 
-    checkpoint = args.checkpoint or config.checkpoint_path
+    #checkpoint = args.checkpoint or config.checkpoint_path
+    checkpoint = "results/no_memory/checkpoint.pt"
     if os.path.exists(checkpoint):
         cfg_path = os.path.join(os.path.dirname(checkpoint), "config.json")
         if os.path.exists(cfg_path):
