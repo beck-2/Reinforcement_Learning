@@ -39,7 +39,7 @@ STAGE_CONFIGS: dict[int, dict] = {
         loop_bonus=0.2,
         use_stage1_barriers=True,
         force_alternation_barriers=True,
-        wall_bump_penalty=-0.005,
+        wall_bump_penalty=-0.02,
         potential_shaping_coef=0.05,
     ),
     2: dict(

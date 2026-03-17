@@ -351,12 +351,9 @@ class Figure8TMazeEnv(MiniGridEnv):
         })
 
         # --- Precompute Rewarded Poses ---
-        # Only the correct approach direction counts — agent must come from the
-        # T-junction arm side, not from the return arm below or any other direction.
-        # Left well (4,4): agent must approach from the East → pose (5, 4, West=2)
-        # Right well (10,4): agent must approach from the West → pose (9, 4, East=0)
-        self.rewarded_poses_left = {(LEFT_WELL_LOC[0] + 1, LEFT_WELL_LOC[1], 2)}   # (5, 4, West)
-        self.rewarded_poses_right = {(RIGHT_WELL_LOC[0] - 1, RIGHT_WELL_LOC[1], 0)} # (9, 4, East)
+        # Reward triggers when agent steps ON the well square (any direction).
+        self.rewarded_poses_left  = {(LEFT_WELL_LOC[0],  LEFT_WELL_LOC[1],  d) for d in range(4)}
+        self.rewarded_poses_right = {(RIGHT_WELL_LOC[0], RIGHT_WELL_LOC[1], d) for d in range(4)}
 
     @property
     def _dynamic_barriers(self) -> set:
@@ -655,18 +652,19 @@ class Figure8TMazeEnv(MiniGridEnv):
         # Must check position only (not full pose) so that turning in place at
         # the well does not reset the guard and re-trigger the same reward.
         agent_xy = tuple(self.agent_pos)
-        left_cell  = (LEFT_WELL_LOC[0] + 1, LEFT_WELL_LOC[1])   # (5, 4)
-        right_cell = (RIGHT_WELL_LOC[0] - 1, RIGHT_WELL_LOC[1]) # (9, 4)
+        left_cell  = (LEFT_WELL_LOC[0],  LEFT_WELL_LOC[1])   # (4, 4)
+        right_cell = (RIGHT_WELL_LOC[0], RIGHT_WELL_LOC[1]) # (10, 4)
         if self._at_well_side == 'left' and agent_xy != left_cell:
             self._at_well_side = None
         elif self._at_well_side == 'right' and agent_xy != right_cell:
             self._at_well_side = None
 
         if self.use_stage1_barriers:
-            # Stage 1: barriers enforce the circuit; _loop_phase not needed
-            if self._at_well_side != 'left' and current_pose in self.rewarded_poses_left:
+            # Stage 1: reward disappears once a well is visited; only the
+            # opposite well is active until the agent visits it.
+            if self._at_well_side != 'left' and self.last_choice != 'left' and current_pose in self.rewarded_poses_left:
                 choice_made = 'left'
-            elif self._at_well_side != 'right' and current_pose in self.rewarded_poses_right:
+            elif self._at_well_side != 'right' and self.last_choice != 'right' and current_pose in self.rewarded_poses_right:
                 choice_made = 'right'
         else:
             # Stages 2/3: use loop-phase gate

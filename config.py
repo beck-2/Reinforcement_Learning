@@ -40,12 +40,12 @@ class PPOConfig:
     incorrect_reward: float = 0.0
     foraging_reward: float = 0.5
     loop_bonus: float = 0.2
-    wall_bump_penalty: float = -0.005
+    wall_bump_penalty: float = -0.02
     potential_shaping_coef: float = 0.05
     step_cost: float = 0.0
 
     # --- Logging ---
     log_interval: int = 10        # log every N rollouts
-    eval_interval: int = 1000     # evaluate every N rollouts
+    eval_interval: int = 50       # checkpoint every N rollouts
     eval_episodes: int = 10
     checkpoint_path: str = "checkpoint_ppo.pt"
