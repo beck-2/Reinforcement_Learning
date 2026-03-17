@@ -23,6 +23,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+
 # Minigrid imports - we're using this framework for grid-based RL environments
 from minigrid.core.constants import COLORS, COLOR_TO_IDX, OBJECT_TO_IDX
 from minigrid.core.grid import Grid
@@ -708,7 +709,10 @@ class Figure8TMazeEnv(MiniGridEnv):
         """
 
         # Get visual rendering of maze (15x15 RGB image)
-        image = self.get_frame(highlight=True, tile_size=VIEW_TILE_SIZE)
+        if getattr(self, 'disable_frame_render', False):
+            image = np.zeros((VIEW_TILE_SIZE, VIEW_TILE_SIZE, 3), dtype=np.uint8)
+        else:
+            image = self.get_frame(highlight=True, tile_size=VIEW_TILE_SIZE)
 
         # Encode last choice as integer for observation space
         # This provides the WORKING MEMORY needed for alternation

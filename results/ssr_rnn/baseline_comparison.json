@@ -1,0 +1,340 @@
+{
+  "baseline": {
+    "episodes": 20,
+    "mean_reward": 15.95,
+    "std_reward": 2.8191310718020897,
+    "mean_accuracy": 0.534086192874413,
+    "std_accuracy": 0.06978556258250886
+  },
+  "trained": {
+    "episodes": 20,
+    "mean_reward": 0.0,
+    "std_reward": 0.0,
+    "mean_accuracy": 0.0,
+    "std_accuracy": 0.0
+  },
+  "baseline_episodes": [
+    {
+      "episode": 1,
+      "total_reward": 15.0,
+      "steps": 10000,
+      "accuracy": 0.4838709677419355,
+      "correct": 15,
+      "incorrect": 16
+    },
+    {
+      "episode": 2,
+      "total_reward": 13.0,
+      "steps": 10000,
+      "accuracy": 0.3939393939393939,
+      "correct": 13,
+      "incorrect": 20
+    },
+    {
+      "episode": 3,
+      "total_reward": 13.0,
+      "steps": 10000,
+      "accuracy": 0.41935483870967744,
+      "correct": 13,
+      "incorrect": 18
+    },
+    {
+      "episode": 4,
+      "total_reward": 20.0,
+      "steps": 10000,
+      "accuracy": 0.5882352941176471,
+      "correct": 20,
+      "incorrect": 14
+    },
+    {
+      "episode": 5,
+      "total_reward": 18.0,
+      "steps": 10000,
+      "accuracy": 0.5625,
+      "correct": 18,
+      "incorrect": 14
+    },
+    {
+      "episode": 6,
+      "total_reward": 17.0,
+      "steps": 10000,
+      "accuracy": 0.5862068965517241,
+      "correct": 17,
+      "incorrect": 12
+    },
+    {
+      "episode": 7,
+      "total_reward": 18.0,
+      "steps": 10000,
+      "accuracy": 0.5454545454545454,
+      "correct": 18,
+      "incorrect": 15
+    },
+    {
+      "episode": 8,
+      "total_reward": 16.0,
+      "steps": 10000,
+      "accuracy": 0.43243243243243246,
+      "correct": 16,
+      "incorrect": 21
+    },
+    {
+      "episode": 9,
+      "total_reward": 17.0,
+      "steps": 10000,
+      "accuracy": 0.6296296296296297,
+      "correct": 17,
+      "incorrect": 10
+    },
+    {
+      "episode": 10,
+      "total_reward": 19.0,
+      "steps": 10000,
+      "accuracy": 0.6333333333333333,
+      "correct": 19,
+      "incorrect": 11
+    },
+    {
+      "episode": 11,
+      "total_reward": 20.0,
+      "steps": 10000,
+      "accuracy": 0.5882352941176471,
+      "correct": 20,
+      "incorrect": 14
+    },
+    {
+      "episode": 12,
+      "total_reward": 16.0,
+      "steps": 10000,
+      "accuracy": 0.5714285714285714,
+      "correct": 16,
+      "incorrect": 12
+    },
+    {
+      "episode": 13,
+      "total_reward": 12.0,
+      "steps": 10000,
+      "accuracy": 0.4444444444444444,
+      "correct": 12,
+      "incorrect": 15
+    },
+    {
+      "episode": 14,
+      "total_reward": 17.0,
+      "steps": 10000,
+      "accuracy": 0.6071428571428571,
+      "correct": 17,
+      "incorrect": 11
+    },
+    {
+      "episode": 15,
+      "total_reward": 19.0,
+      "steps": 10000,
+      "accuracy": 0.5,
+      "correct": 19,
+      "incorrect": 19
+    },
+    {
+      "episode": 16,
+      "total_reward": 17.0,
+      "steps": 10000,
+      "accuracy": 0.5666666666666667,
+      "correct": 17,
+      "incorrect": 13
+    },
+    {
+      "episode": 17,
+      "total_reward": 14.0,
+      "steps": 10000,
+      "accuracy": 0.5185185185185185,
+      "correct": 14,
+      "incorrect": 13
+    },
+    {
+      "episode": 18,
+      "total_reward": 13.0,
+      "steps": 10000,
+      "accuracy": 0.5652173913043478,
+      "correct": 13,
+      "incorrect": 10
+    },
+    {
+      "episode": 19,
+      "total_reward": 16.0,
+      "steps": 10000,
+      "accuracy": 0.5714285714285714,
+      "correct": 16,
+      "incorrect": 12
+    },
+    {
+      "episode": 20,
+      "total_reward": 9.0,
+      "steps": 10000,
+      "accuracy": 0.47368421052631576,
+      "correct": 9,
+      "incorrect": 10
+    }
+  ],
+  "trained_episodes": [
+    {
+      "episode": 1,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 2,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 3,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 4,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 5,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 6,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 7,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 8,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 9,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 10,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 11,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 12,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 13,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 14,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 15,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 16,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 17,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 18,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 19,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    },
+    {
+      "episode": 20,
+      "total_reward": 0.0,
+      "steps": 10000,
+      "accuracy": 0.0,
+      "correct": 0,
+      "incorrect": 0
+    }
+  ]
+}
